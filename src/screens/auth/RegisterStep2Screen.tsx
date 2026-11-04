@@ -15,6 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Input } from '../../components/Input';
 import { Button } from '../../components/Button';
 import { Dropdown } from '../../components/Dropdown';
+import { validateAddressInfo } from '../../utils/registrationValidation';
 
 const PROVINCE_OPTIONS = [
   'Eastern Cape',
@@ -30,7 +31,7 @@ const PROVINCE_OPTIONS = [
 
 const PatientRegistration = ({ route, navigation }: any) => {
   const { theme } = useTheme();
-  const { register, isLoading } = useAuth();
+  const { register } = useAuth();
   const personalInfo = route.params || {};
   const [registrationComplete, setRegistrationComplete] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
@@ -51,19 +52,7 @@ const PatientRegistration = ({ route, navigation }: any) => {
   };
 
   const validate = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!form.streetNumber.trim()) newErrors.streetNumber = 'Street number is required';
-    if (!form.streetName.trim()) newErrors.streetName = 'Street name is required';
-    if (!form.city.trim()) newErrors.city = 'City is required';
-    if (!form.postalCode.trim()) newErrors.postalCode = 'Postal code is required';
-    else if (!/^\d{4}$/.test(form.postalCode.trim())) newErrors.postalCode = 'Postal code must be 4 digits';
-    if (!form.province) newErrors.province = 'Please select your province';
-    if (!form.nextOfKinName.trim()) newErrors.nextOfKinName = 'Next of kin name is required';
-    if (!form.nextOfKinRelationship.trim()) newErrors.nextOfKinRelationship = 'Relationship is required';
-    if (!form.nextOfKinContactNumber.trim()) newErrors.nextOfKinContactNumber = 'Contact number is required';
-    else if (!/^\d{10}$/.test(form.nextOfKinContactNumber.trim())) newErrors.nextOfKinContactNumber = 'Contact number must be 10 digits';
-
+    const newErrors = validateAddressInfo(form);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -76,7 +65,8 @@ const PatientRegistration = ({ route, navigation }: any) => {
       const result = await register(personalInfo.email, personalInfo.password, {
         firstName: personalInfo.firstName,
         lastName: personalInfo.lastName,
-        contactNumber: personalInfo.contactNumber,
+        // Already strict 10-digit SA local format; pass through as-is.
+        contactNumber: personalInfo.contactNumber.trim(),
         idNumber: personalInfo.idNumber,
         gender: personalInfo.gender,
         ethnicity: personalInfo.ethnicity,
@@ -90,27 +80,27 @@ const PatientRegistration = ({ route, navigation }: any) => {
         province: form.province,
         nextOfKinName: form.nextOfKinName,
         nextOfKinRelationship: form.nextOfKinRelationship,
-        nextOfKinContactNumber: form.nextOfKinContactNumber,
+        // Strict 10-digit SA local format; pass through as-is.
+        nextOfKinContactNumber: form.nextOfKinContactNumber.trim(),
       });
-      
+
       setIsSubmitting(false);
 
       if (result.needsVerification) {
-        // A 6-digit code was emailed. The account is only finished (and the
-        // patient signed in) once it has been entered on the next screen.
         navigation.navigate('VerifyEmail', { email: personalInfo.email });
       } else {
-        // Email confirmation is switched off in Supabase, so we're already signed in.
-        // Do NOT navigate to PatientHome here — it is only registered in the
-        // authenticated stack. AuthContext switches AppNavigator automatically.
         setRegistrationComplete(true);
       }
     } catch (err: any) {
       const message = err.message || '';
-      if (message.toLowerCase().includes('already') || 
-          message.toLowerCase().includes('exists') || 
-          message.toLowerCase().includes('duplicate')) {
-        setErrors({ general: 'An account with this email already exists. Please sign in instead.' });
+      if (
+        message.toLowerCase().includes('already') ||
+        message.toLowerCase().includes('exists') ||
+        message.toLowerCase().includes('duplicate')
+      ) {
+        setErrors({
+          general: 'An account with this email already exists. Please sign in instead.',
+        });
       } else {
         setErrors({ general: message || 'Registration failed. Please try again.' });
       }
@@ -133,14 +123,27 @@ const PatientRegistration = ({ route, navigation }: any) => {
             <Text style={[styles.successTitle, { color: theme.colors.text }]}>
               Registration Successful!
             </Text>
-            <View style={[styles.iconCircle, { borderColor: theme.colors.success || '#22C55E' }]}>
-              <Ionicons name="checkmark-sharp" size={48} color={theme.colors.success || '#22C55E'} />
+            <View
+              style={[styles.iconCircle, { borderColor: theme.colors.success || '#22C55E' }]}
+            >
+              <Ionicons
+                name="checkmark-sharp"
+                size={48}
+                color={theme.colors.success || '#22C55E'}
+              />
             </View>
-            <Text style={[styles.successSubtitle, { color: theme.colors.textSecondary }]}>
+            <Text
+              style={[styles.successSubtitle, { color: theme.colors.textSecondary }]}
+            >
               Your account has been created successfully.{'\n'}
               You will be redirected to the home screen.
             </Text>
-            <Text style={[styles.successSubtitle, { color: theme.colors.textSecondary, marginTop: 8 }]}>
+            <Text
+              style={[
+                styles.successSubtitle,
+                { color: theme.colors.textSecondary, marginTop: 8 },
+              ]}
+            >
               Opening your home screen…
             </Text>
           </View>
@@ -159,7 +162,9 @@ const PatientRegistration = ({ route, navigation }: any) => {
               <Text style={[styles.title, { color: theme.colors.text }]}>
                 Create account
               </Text>
-              <Text style={[styles.stepIndicator, { color: theme.colors.textSecondary }]}>
+              <Text
+                style={[styles.stepIndicator, { color: theme.colors.textSecondary }]}
+              >
                 Step 2 of 2
               </Text>
             </View>
@@ -201,8 +206,9 @@ const PatientRegistration = ({ route, navigation }: any) => {
               <Input
                 label="Postal Code"
                 value={form.postalCode}
-                onChangeText={(v) => updateField('postalCode', v)}
+                onChangeText={(v) => updateField('postalCode', v.replace(/\D/g, ''))}
                 keyboardType="numeric"
+                maxLength={4}
                 error={errors.postalCode}
               />
               <Dropdown
@@ -236,8 +242,12 @@ const PatientRegistration = ({ route, navigation }: any) => {
               <Input
                 label="Contact Number"
                 value={form.nextOfKinContactNumber}
-                onChangeText={(v) => updateField('nextOfKinContactNumber', v)}
-                keyboardType="phone-pad"
+                onChangeText={(v) =>
+                  updateField('nextOfKinContactNumber', v.replace(/\D/g, '').slice(0, 10))
+                }
+                keyboardType="number-pad"
+                maxLength={10}
+                placeholder="0821234567"
                 error={errors.nextOfKinContactNumber}
               />
             </View>
@@ -264,34 +274,13 @@ const PatientRegistration = ({ route, navigation }: any) => {
 export default PatientRegistration;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  backIcon: {
-    marginBottom: 8,
-    alignSelf: 'flex-start',
-  },
-  backIconText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  header: {
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  stepIndicator: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
+  container: { flex: 1 },
+  scrollContent: { padding: 24, paddingTop: 60, paddingBottom: 40 },
+  backIcon: { marginBottom: 8, alignSelf: 'flex-start' },
+  backIconText: { fontSize: 16, fontWeight: '600' },
+  header: { marginBottom: 12 },
+  title: { fontSize: 28, fontWeight: '700', marginBottom: 4 },
+  stepIndicator: { fontSize: 14, fontWeight: '500' },
   progressBar: {
     height: 4,
     borderRadius: 2,
@@ -299,29 +288,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
-  borderedBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-  },
-  nextButton: {
-    marginTop: 8,
-  },
-  generalError: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
+  progressFill: { height: '100%', borderRadius: 2 },
+  borderedBox: { borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 24 },
+  sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 12 },
+  nextButton: { marginTop: 8 },
+  generalError: { fontSize: 14, textAlign: 'center', marginBottom: 12 },
   successContainer: {
     flex: 1,
     alignItems: 'center',
