@@ -17,6 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import { authApi } from "../../services/api";
+import { validateEmail } from "../../utils/validators";
 
 type ForgotPasswordNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ForgotPassword'>;
 
@@ -27,19 +28,15 @@ const ForgotPasswordScreen: React.FC = () => {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const handleSendOtp = async () => {
-    if (!email.trim()) {
-      Alert.alert("Error", "Please enter your email address");
-      return;
-    }
-
-    if (!/\S+@\S+\.\S+/.test(email)) {
-      Alert.alert("Error", "Please enter a valid email address");
+    const emailError = validateEmail(email);
+    if (emailError) {
+      Alert.alert("Error", emailError);
       return;
     }
 
     setIsLoading(true);
     try {
-      await authApi.forgotPassword(email);
+      await authApi.forgotPassword(email.trim());
       setIsSuccess(true);
       Alert.alert(
         "OTP Sent",
@@ -84,8 +81,8 @@ const ForgotPasswordScreen: React.FC = () => {
               <Text style={styles.heading}>Forgot your password?</Text>
 
               <Text style={styles.subtitle}>
-                {isSuccess 
-                  ? "We've sent a verification code to your email. Please check your inbox." 
+                {isSuccess
+                  ? "We've sent a verification code to your email. Please check your inbox."
                   : "Enter your registered email and we'll send you OTP"}
               </Text>
 
@@ -104,8 +101,8 @@ const ForgotPasswordScreen: React.FC = () => {
                 />
               </View>
 
-              <TouchableOpacity 
-                style={[styles.btnPrimary, (isLoading || isSuccess) && styles.btnDisabled]} 
+              <TouchableOpacity
+                style={[styles.btnPrimary, (isLoading || isSuccess) && styles.btnDisabled]}
                 onPress={handleSendOtp}
                 disabled={isLoading || isSuccess}
               >
@@ -133,13 +130,8 @@ const ForgotPasswordScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#e8d5b7",
-  },
-  flex: {
-    flex: 1,
-  },
+  safeArea: { flex: 1, backgroundColor: "#e8d5b7" },
+  flex: { flex: 1 },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: "center",
@@ -169,16 +161,8 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     marginBottom: 20,
   },
-  backArrow: {
-    fontSize: 18,
-    color: "#1e2a3a",
-    marginRight: 6,
-  },
-  backText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1e2a3a",
-  },
+  backArrow: { fontSize: 18, color: "#1e2a3a", marginRight: 6 },
+  backText: { fontSize: 14, fontWeight: "600", color: "#1e2a3a" },
   iconWrapper: {
     width: 64,
     height: 64,
@@ -187,9 +171,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  lockIcon: {
-    fontSize: 28,
-  },
+  lockIcon: { fontSize: 28 },
   body: {
     backgroundColor: "#ffffff",
     paddingHorizontal: 24,
@@ -211,15 +193,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     lineHeight: 18,
   },
-  formGroup: {
-    width: "100%",
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 12,
-    color: "#444444",
-    marginBottom: 5,
-  },
+  formGroup: { width: "100%", marginBottom: 20 },
+  label: { fontSize: 12, color: "#444444", marginBottom: 5 },
   input: {
     borderWidth: 1,
     borderColor: "#d0d0d0",
@@ -238,23 +213,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 20,
   },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  btnPrimaryText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  btnDisabled: { opacity: 0.6 },
+  btnPrimaryText: { color: "#ffffff", fontSize: 14, fontWeight: "600" },
   signInRow: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
   },
-  signInText: {
-    fontSize: 12,
-    color: "#666666",
-  },
+  signInText: { fontSize: 12, color: "#666666" },
   signInLink: {
     fontSize: 12,
     fontWeight: "700",
