@@ -165,18 +165,21 @@ export async function cancelLocalNotification(id: string): Promise<void> {
 /**
  * Create an in-app notification row (and optionally trigger push later via Edge Function).
  */
+export type InAppNotificationType =
+  | 'appointment_reminder'
+  | 'appointment_confirmation'
+  | 'alert'
+  | 'general'
+  | 'emergency'
+  | 'system'
+  | 'prescription'
+  | 'referral';
+
 export async function createInAppNotification(opts: {
   userId: string;
   title: string;
   message: string;
-  type?:
-    | 'appointment_reminder'
-    | 'alert'
-    | 'general'
-    | 'emergency'
-    | 'system'
-    | 'prescription'
-    | 'referral';
+  type?: InAppNotificationType;
   data?: Record<string, unknown>;
 }): Promise<void> {
   const { error } = await supabase.from('notifications').insert({
@@ -277,11 +280,27 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   }
 
   try {
+    const rawType = payload.data?.type;
+    const allowed: InAppNotificationType[] = [
+      'appointment_reminder',
+      'appointment_confirmation',
+      'alert',
+      'general',
+      'emergency',
+      'system',
+      'prescription',
+      'referral',
+    ];
+    const notifType: InAppNotificationType =
+      typeof rawType === 'string' && (allowed as string[]).includes(rawType)
+        ? (rawType as InAppNotificationType)
+        : 'general';
+
     await createInAppNotification({
       userId,
       title: payload.title,
       message: payload.body,
-      type: (payload.data?.type as 'appointment_reminder' | 'alert' | 'general' | 'emergency' | 'system' | 'prescription' | 'referral') ?? 'general',
+      type: notifType,
       data: payload.data,
     });
   } catch (e) {
