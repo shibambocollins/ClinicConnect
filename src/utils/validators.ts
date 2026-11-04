@@ -51,6 +51,28 @@ export function validatePhoneNumber(
 export const isValidPhoneNumber = (value: string | null | undefined): boolean =>
   normalizePhoneNumber(value) !== null;
 
+// Strict 10-digit SA local format, e.g. 0821234567.
+// Unlike normalizePhoneNumber, this rejects +27 / 0027 / spaces / dashes.
+const SA_LOCAL_10_RE = /^0[1-8]\d{8}$/;
+
+export function isStrictSALocalNumber(value: string | null | undefined): boolean {
+  return SA_LOCAL_10_RE.test((value ?? '').trim());
+}
+
+export function validateStrictSALocalNumber(
+  value: string | null | undefined,
+  label = 'Contact number'
+): string | null {
+  const digits = (value ?? '').trim();
+  if (!digits) return `${label} is required`;
+  if (!/^\d+$/.test(digits)) return `${label} must contain digits only`;
+  if (digits.length !== 10) return `${label} must be exactly 10 digits`;
+  if (!SA_LOCAL_10_RE.test(digits)) {
+    return `${label} must be a valid SA number starting with 0 (e.g. 0821234567)`;
+  }
+  return null;
+}
+
 // South African ID number
 // 13 digits:  Y Y M M D D | S S S S | C | A | Z
 //   YYMMDD  date of birth
@@ -88,7 +110,10 @@ function resolveBirthYear(yy: number, now: Date): number {
 }
 
 /** Returns the details encoded in a valid SA ID number, or null if the ID isn't valid. */
-export function parseSAIdNumber(value: string | null | undefined, now: Date = new Date()): SAIdInfo | null {
+export function parseSAIdNumber(
+  value: string | null | undefined,
+  now: Date = new Date()
+): SAIdInfo | null {
   const id = (value ?? '').trim();
   if (!/^\d{13}$/.test(id)) return null;
 
