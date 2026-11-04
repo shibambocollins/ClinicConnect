@@ -15,6 +15,7 @@ interface DropdownProps {
   options: readonly string[];
   onSelect: (value: string) => void;
   error?: string;
+  placeholder?: string;
 }
 
 export const Dropdown: React.FC<DropdownProps> = ({
@@ -23,6 +24,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
   options,
   onSelect,
   error,
+  placeholder,
 }) => {
   const { theme } = useTheme();
   const [visible, setVisible] = useState(false);
@@ -47,7 +49,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
             { color: value ? theme.colors.text : theme.colors.textSecondary },
           ]}
         >
-          {value || `Select ${label.toLowerCase()}`}
+          {value || placeholder || `Select ${label.toLowerCase()}`}
         </Text>
         <Text style={[styles.arrow, { color: theme.colors.textSecondary }]}>
           ▼
