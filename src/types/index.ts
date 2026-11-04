@@ -95,6 +95,8 @@ export interface Service {
   description?: string | null;
   estimated_duration?: string | null;
   price?: number | null;
+  /** Clinical department — should match staff.department values */
+  department?: string | null;
   status: ActiveStatus;
   created_at?: string;
   updated_at?: string;
