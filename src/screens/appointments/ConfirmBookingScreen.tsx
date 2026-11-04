@@ -21,6 +21,7 @@ import { supabase } from '../../services/supabase/client';
 import { ensureNextDaySlot } from '../../services/slots';
 import { RootStackParamList } from '../../navigation/types';
 import { sendPatientAppointmentReminder } from '../../services/notifications/appointmentReminders';
+import { sendBookingConfirmation } from '../../services/notifications/appointmentConfirmation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'ConfirmBooking'>;
 type RouteProp = import('@react-navigation/native').RouteProp<RootStackParamList, 'ConfirmBooking'>;
@@ -72,21 +73,20 @@ export default function ConfirmBookingScreen() {
     setSubmitting(true);
     let slotTaken = false;
     try {
-      let patientId = profile?.id;
-      if (!patientId) {
-        const { data: patientData, error: patientError } = await supabase
-          .from('patients')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
-        if (patientError || !patientData) {
-          throw new Error('Patient profile not found. Please complete your profile first.');
-        }
-        patientId = patientData.id;
-      }
+      let patientId: string = profile?.id ?? '';
+if (!patientId) {
+  const { data: patientData, error: patientError } = await supabase
+    .from('patients')
+    .select('id')
+    .eq('user_id', user.id)
+    .single();
+  if (patientError || !patientData) {
+    throw new Error('Patient profile not found. Please complete your profile first.');
+  }
+  patientId = patientData.id;
+}
 
-      // Atomic server-side booking: locks the slot, checks capacity and the
-      // one-per-day rule, inserts the appointment and updates the slot.
+      // Atomic server-side booking.
       const { data: result, error: rpcError } = await supabase.rpc('book_appointment', {
         p_patient_id: patientId,
         p_clinic_id: clinicId,
@@ -95,14 +95,35 @@ export default function ConfirmBookingScreen() {
         p_reason: reason.trim() || serviceName || null,
       });
 
-      if (rpcError) throw rpcError;
-      if (!result?.ok) {
-        slotTaken = result?.code === 'slot_taken' || result?.code === 'slot_missing';
-        throw new Error(result?.message || 'Could not complete your booking.');
+      if (rpcError) {
+        console.warn('[ConfirmBooking] RPC error:', rpcError);
+        throw rpcError;
+      }
+      // Ensure we treat the jsonb response consistently
+      const payload: any = result;
+      if (!payload?.ok) {
+        const code = payload?.code || '';
+        slotTaken = code === 'slot_taken' || code === 'slot_missing';
+        console.warn('[ConfirmBooking] Booking rejected:', code, payload?.message);
+        throw new Error(payload?.message || 'Could not complete your booking.');
       }
 
       // Keep the clinic's daily schedule rolling (best effort)
       await ensureNextDaySlot(timeSlotId).catch(() => {});
+
+      // Fire the confirmation (in-app + push + email) for the newly created
+      // appointment. Never blocks the booking flow.
+      sendBookingConfirmation({
+        patientUserId: user.id,
+        patientId,
+        appointmentId: result.appointment_id,
+        clinicName: clinicName || 'the clinic',
+        serviceName: serviceName || 'appointment',
+        date,
+        startTime,
+        endTime: endTime ?? null,
+        reason: reason.trim() || null,
+      }).catch((e: unknown) => console.warn('[ConfirmBooking] Confirmation failed:', e));
 
       // Fire the appointment reminder(s) for the newly created appointment,
       // honouring the patient's chosen reminder timing.
@@ -120,7 +141,12 @@ export default function ConfirmBookingScreen() {
               ? '30_min_before'
               : 'day_before';
 
-          await sendPatientAppointmentReminder(user.id, createdAppointment, reminderTiming, new Date());
+          await sendPatientAppointmentReminder(
+            user.id,
+            createdAppointment,
+            reminderTiming,
+            new Date()
+          );
         }
       } catch (e) {
         console.warn('[Reminders] Failed to send appointment reminder after booking:', e);
@@ -137,7 +163,9 @@ export default function ConfirmBookingScreen() {
       Alert.alert(
         slotTaken ? 'Time no longer available' : 'Booking Failed',
         err.message || 'Could not complete your booking. Please try again.',
-        slotTaken ? [{ text: 'Choose another time', onPress: () => navigation.goBack() }] : undefined
+        slotTaken
+          ? [{ text: 'Choose another time', onPress: () => navigation.goBack() }]
+          : undefined
       );
     } finally {
       setSubmitting(false);

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../../services/supabase/client';
 import {
@@ -53,6 +53,13 @@ export default function SelectTimeSlotScreen() {
   const route = useRoute<RouteProp>();
   const { profile, user } = useAuth();
   const { clinicId, clinicName, serviceId, serviceName } = route.params;
+
+  const isFocused = useIsFocused();
+  const isFocusedRef = useRef(isFocused);
+
+  useEffect(() => {
+    isFocusedRef.current = isFocused;
+  }, [isFocused]);
 
   const [loading, setLoading] = useState(true);
   const [slots, setSlots] = useState<SlotRow[]>([]);
@@ -139,8 +146,11 @@ export default function SelectTimeSlotScreen() {
   const refetchRef = useRef(fetchSlots);
   refetchRef.current = fetchSlots;
   useEffect(() => {
+    // Generate a unique channel name to avoid clashes during React strict mode / fast refresh
+    const channelName = `time_slots:${clinicId}:${serviceId}:${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
     const channel = supabase
-      .channel(`time_slots:${clinicId}:${serviceId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'time_slots', filter: `clinic_id=eq.${clinicId}` },
@@ -150,10 +160,15 @@ export default function SelectTimeSlotScreen() {
           setSlots((prev) =>
             prev.map((s) => (payload.new && s.id === payload.new.id ? { ...s, ...payload.new } : s))
           );
+          
           // If our selection just got taken, drop it and tell the user.
           setSelectedSlotId((cur) => {
             if (cur && payload.new?.id === cur && !isSlotBookable(payload.new)) {
-              Alert.alert('Just booked', 'Someone else took that time. Please pick another.');
+              // Only show the alert if this screen is currently focused (visible)
+              // Otherwise, the user is likely on the Confirm screen booking it themselves.
+              if (isFocusedRef.current) {
+                Alert.alert('Just booked', 'Someone else took that time. Please pick another.');
+              }
               return null;
             }
             return cur;
@@ -161,6 +176,7 @@ export default function SelectTimeSlotScreen() {
         }
       )
       .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
     };

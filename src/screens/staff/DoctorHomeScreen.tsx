@@ -18,6 +18,10 @@ import { useTheme } from '../../context/ThemeContext';
 import { supabase } from '../../services/supabase/client';
 import AppointmentStatusActions from '../../components/AppointmentStatusActions';
 import { sendTodaysMorningSummaries } from '@/services/notifications/appointmentReminders';
+import {
+  countStaffScopedAppointments,
+  fetchStaffScopedAppointments,
+} from '../../services/staffAppointments';
 
 export default function DoctorHomeScreen() {
   const navigation = useNavigation<any>();
@@ -32,52 +36,45 @@ export default function DoctorHomeScreen() {
 
   const name = `${staffProfile?.first_name || 'Doctor'} ${staffProfile?.last_name || ''}`.trim();
   const specialty = staffProfile?.specialization;
+  const department = staffProfile?.department;
 
   const load = useCallback(async () => {
     try {
       setError(null);
       const today = new Date().toISOString().slice(0, 10);
 
-      const [{ count }, { data: appts, error: apptErr }, { data: pats, error: patErr }] =
-        await Promise.all([
-          supabase
-            .from('appointments')
-            .select('*', { count: 'exact', head: true })
-            .in('status', ['booked', 'confirmed']),
-          supabase
-            .from('appointments')
-            .select(
-              `
-              id,
-              status,
-              patient_id,
-              created_at,
-              patients ( first_name, last_name, contact_number ),
-              services ( service_name ),
-              time_slots ( date, start_time, end_time )
-            `
-            )
-            .in('status', ['booked', 'confirmed'])
-            .order('created_at', { ascending: false })
-            .limit(15),
-          supabase
-            .from('patients')
-            .select('id, first_name, last_name, contact_number, email, id_number')
-            .eq('status', 'active')
-            .order('last_name')
-            .limit(20),
-        ]);
+      // Appointments limited to this doctor's clinic + department
+      const [count, appts] = await Promise.all([
+        countStaffScopedAppointments(staffProfile, ['booked', 'confirmed']),
+        fetchStaffScopedAppointments(staffProfile, {
+          statuses: ['booked', 'confirmed'],
+          limit: 25,
+        }),
+      ]);
 
-      if (apptErr) throw apptErr;
-      if (patErr) throw patErr;
+      setOpenCount(count);
 
-      setOpenCount(count || 0);
-
-      // Prefer today's slots when available
       const list = appts || [];
       const todays = list.filter((a: any) => a.time_slots?.date === today);
       setTodayQueue(todays.length > 0 ? todays : list);
-      setPatients(pats || []);
+
+      // Patients who appear in the scoped queue (not the whole clinic roster)
+      const patientIds = [
+        ...new Set(list.map((a: any) => a.patient_id).filter(Boolean)),
+      ] as string[];
+
+      if (patientIds.length > 0) {
+        const { data: pats, error: patErr } = await supabase
+          .from('patients')
+          .select('id, first_name, last_name, contact_number, email, id_number')
+          .in('id', patientIds)
+          .order('last_name')
+          .limit(20);
+        if (patErr) throw patErr;
+        setPatients(pats || []);
+      } else {
+        setPatients([]);
+      }
     } catch (e: any) {
       console.error(e);
       setError(e.message || 'Failed to load dashboard');
@@ -85,7 +82,7 @@ export default function DoctorHomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [staffProfile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -132,6 +129,7 @@ export default function DoctorHomeScreen() {
                 {name}
               </Text>
               {specialty ? <Text style={styles.specialty}>{specialty}</Text> : null}
+              {department ? <Text style={styles.specialty}>{department}</Text> : null}
             </View>
             <TouchableOpacity
               style={styles.avatar}

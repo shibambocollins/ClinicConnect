@@ -23,6 +23,18 @@ import { Input } from '../../components/Input';
 import { Dropdown } from '../../components/Dropdown';
 import { StatusFilter, StatusFilterValue, matchesStatus } from '../../components/StatusFilter';
 
+const DEPARTMENTS = [
+  'General Medicine',
+  'Nursing',
+  'Pediatrics & Child Health',
+  "Women's Health / OB-GYN",
+  'Chronic Care / Internal Medicine',
+  'Mental Health',
+  'Pharmacy',
+  'Laboratory / Diagnostics',
+  'Radiology / Imaging',
+] as const;
+
 interface Service {
   id: string;
   service_name: string;
@@ -30,6 +42,7 @@ interface Service {
   clinic_name?: string;
   description: string;
   estimated_duration: string;
+  department?: string | null;
   status: 'active' | 'inactive';
 }
 
@@ -49,6 +62,7 @@ export default function ServiceManagementScreen() {
     clinic_id: '',
     description: '',
     estimated_duration: '',
+    department: '',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -103,7 +117,8 @@ export default function ServiceManagementScreen() {
       if (!q) return true;
       return (
         (service.service_name || '').toLowerCase().includes(q) ||
-        (service.clinic_name || '').toLowerCase().includes(q)
+        (service.clinic_name || '').toLowerCase().includes(q) ||
+        (service.department || '').toLowerCase().includes(q)
       );
     });
   }, [services, searchQuery, statusFilter]);
@@ -124,6 +139,7 @@ export default function ServiceManagementScreen() {
       clinic_id: service.clinic_id,
       description: service.description || '',
       estimated_duration: service.estimated_duration || '',
+      department: service.department || '',
     });
     setModalVisible(true);
   };
@@ -170,15 +186,18 @@ export default function ServiceManagementScreen() {
     if (!validateForm()) return;
 
     try {
+      const payload = {
+        service_name: form.service_name,
+        clinic_id: form.clinic_id,
+        description: form.description,
+        estimated_duration: form.estimated_duration,
+        department: form.department || null,
+      };
+
       if (editingService) {
         const { error } = await supabase
           .from('services')
-          .update({
-            service_name: form.service_name,
-            clinic_id: form.clinic_id,
-            description: form.description,
-            estimated_duration: form.estimated_duration,
-          })
+          .update(payload)
           .eq('id', editingService.id);
 
         if (error) throw error;
@@ -186,10 +205,7 @@ export default function ServiceManagementScreen() {
         const { error } = await supabase
           .from('services')
           .insert({
-            service_name: form.service_name,
-            clinic_id: form.clinic_id,
-            description: form.description,
-            estimated_duration: form.estimated_duration,
+            ...payload,
             status: 'active',
           });
 
@@ -198,7 +214,13 @@ export default function ServiceManagementScreen() {
 
       setModalVisible(false);
       setEditingService(null);
-      setForm({ service_name: '', clinic_id: '', description: '', estimated_duration: '' });
+      setForm({
+        service_name: '',
+        clinic_id: '',
+        description: '',
+        estimated_duration: '',
+        department: '',
+      });
       await fetchData();
       Alert.alert('Success', `Service ${editingService ? 'updated' : 'created'} successfully`);
     } catch (error: any) {
@@ -242,6 +264,14 @@ export default function ServiceManagementScreen() {
             {service.clinic_name || 'Unassigned'}
           </Text>
         </View>
+        {service.department ? (
+          <View style={styles.detailRow}>
+            <Ionicons name="people-outline" size={16} color="#666" />
+            <Text style={[styles.detailText, { color: theme.colors.textSecondary }]}>
+              {service.department}
+            </Text>
+          </View>
+        ) : null}
         <View style={styles.detailRow}>
           <Ionicons name="time-outline" size={16} color="#666" />
           <Text style={[styles.detailText, { color: theme.colors.textSecondary }]}>
@@ -276,7 +306,13 @@ export default function ServiceManagementScreen() {
             style={styles.addButton}
             onPress={() => {
               setEditingService(null);
-              setForm({ service_name: '', clinic_id: '', description: '', estimated_duration: '' });
+              setForm({
+                service_name: '',
+                clinic_id: '',
+                description: '',
+                estimated_duration: '',
+                department: '',
+              });
               setModalVisible(true);
             }}
           >
@@ -370,6 +406,14 @@ export default function ServiceManagementScreen() {
                   if (clinic) setForm({ ...form, clinic_id: clinic.id });
                 }}
                 error={formErrors.clinic_id}
+              />
+
+              <Dropdown
+                label="Department"
+                value={form.department}
+                options={[...DEPARTMENTS]}
+                onSelect={(value) => setForm({ ...form, department: value })}
+                placeholder="Select department"
               />
 
               <Input

@@ -15,9 +15,9 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
-import { supabase } from '../../services/supabase/client';
 import AppointmentStatusActions from '../../components/AppointmentStatusActions';
 import { sendTodaysMorningSummaries } from '@/services/notifications/appointmentReminders';
+import { fetchStaffScopedAppointments } from '../../services/staffAppointments';
 
 export default function NurseHomeScreen() {
   const navigation = useNavigation<any>();
@@ -34,25 +34,11 @@ export default function NurseHomeScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const { data, error: qErr } = await supabase
-        .from('appointments')
-        .select(
-          `
-          id,
-          status,
-          patient_id,
-          created_at,
-          patients ( first_name, last_name, contact_number ),
-          services ( service_name ),
-          clinics ( clinic_name ),
-          time_slots ( date, start_time, end_time )
-        `
-        )
-        .in('status', ['booked', 'confirmed'])
-        .order('created_at', { ascending: false })
-        .limit(25);
-
-      if (qErr) throw qErr;
+      // Only appointments for this nurse's clinic + department
+      const data = await fetchStaffScopedAppointments(staffProfile, {
+        statuses: ['booked', 'confirmed'],
+        limit: 25,
+      });
       setQueue(data || []);
     } catch (e: any) {
       console.error(e);
@@ -62,7 +48,7 @@ export default function NurseHomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [staffProfile]);
 
   useFocusEffect(
     useCallback(() => {
