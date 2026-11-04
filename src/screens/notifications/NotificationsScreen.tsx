@@ -96,6 +96,12 @@ export default function NotificationsScreen() {
     const data = item.data || {};
     const type = item.type || data.type;
 
+    // Booking confirmation → appointment detail
+    if (type === 'appointment_confirmation' && data.appointmentId) {
+      navigation.navigate('AppointmentDetail', { appointmentId: data.appointmentId });
+      return;
+    }
+
     if (type === 'referral' || data.screen === 'Referral') {
       navigation.navigate('Referral', {
         referralId: data.referralId,
@@ -110,9 +116,7 @@ export default function NotificationsScreen() {
     }
 
     if (type === 'prescription' || data.screen === 'MedicalRecord') {
-      navigation.navigate('MedicalRecord', {
-        patientId: data.patientId,
-      });
+      navigation.navigate('MedicalRecord', { patientId: data.patientId });
       return;
     }
 
@@ -138,7 +142,13 @@ export default function NotificationsScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                load();
+              }}
+            />
           }
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
@@ -156,6 +166,10 @@ export default function NotificationsScreen() {
               <Text style={styles.cardTime}>
                 {item.created_at ? new Date(item.created_at).toLocaleString('en-ZA') : ''}
               </Text>
+              {(item.type === 'appointment_confirmation' ||
+                item.data?.type === 'appointment_confirmation') && (
+                <Text style={styles.cta}>Tap to view your appointment →</Text>
+              )}
               {(item.type === 'referral' || item.data?.type === 'referral') && (
                 <Text style={styles.cta}>Tap to view referral letter →</Text>
               )}
